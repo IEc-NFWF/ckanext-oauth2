@@ -79,7 +79,7 @@ class OAuth2Helper(object):
         self.redirect_uri = urljoin(urljoin(toolkit.config.get('ckan.site_url', 'http://localhost:5000'), toolkit.config.get('ckan.root_path')), REDIRECT_URL)
 
         # Init db
-        db.init_db()
+        # db.init_db()
 
 
         missing = [key for key in REQUIRED_CONF if getattr(self, key, "") == ""]

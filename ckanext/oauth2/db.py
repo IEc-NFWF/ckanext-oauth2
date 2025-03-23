@@ -50,5 +50,12 @@ class UserToken(Base, DomainObject):
     expires_in = sa.Column(sa.types.UnicodeText)
 
 def init_db():
+    # Check if the session bind is available
+    if meta.Session.bind is None:
+        log.warning("Database session not bound yet, skipping table creation")
+        return False
+        
     # Create tables if they do not exist
     metadata.create_all(bind=meta.Session.bind, checkfirst=True)
+    log.info("OAuth2 tables created successfully")
+    return True

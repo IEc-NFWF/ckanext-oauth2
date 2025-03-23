@@ -69,6 +69,7 @@ class OAuth2Plugin(plugins.SingletonPlugin):
     plugins.implements(plugins.IAuthFunctions, inherit=True)
     plugins.implements(plugins.IBlueprint)
     plugins.implements(plugins.IConfigurer)
+    plugins.implements(plugins.IConfigurable)
 
     # IBlueprint
     def get_blueprint(self):
@@ -78,6 +79,7 @@ class OAuth2Plugin(plugins.SingletonPlugin):
         '''Store the OAuth 2 client configuration'''
         log.debug('Init OAuth2 extension')
         log.debug(f'Creating UserToken...')
+        self.name = name or 'oauth2'
         self.oauth2helper = OAuth2Helper()
 
     def identify(self):
@@ -122,3 +124,12 @@ class OAuth2Plugin(plugins.SingletonPlugin):
         # Add this plugin's templates dir to CKAN's extra_template_paths, so
         # that CKAN will use this plugin's custom templates.
         plugins.toolkit.add_template_directory(config, 'templates')
+
+    # Add this method
+    def configure(self, config):
+        """
+        Called after CKAN's configuration has been initialized.
+        This is where the database connection should be available.
+        """
+        import ckanext.oauth2.db as db
+        db.init_db()
