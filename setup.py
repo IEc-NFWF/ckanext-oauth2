@@ -22,9 +22,6 @@ import re
 
 from setuptools import setup, find_packages
 
-from ckanext.oauth2 import __version__, __description__
-
-
 PYPI_RST_FILTERS = (
     # Remove travis ci badge
     (r'.*travis-ci\.org/.*', ''),
@@ -53,11 +50,11 @@ def rst(filename):
 #     rst('CHANGELOG.rst'),
 #     ''
 # ))
-
+__version__ = '0.0.1'
 setup(
     name='ckanext-oauth2',
     version=__version__,
-    description=__description__,
+    description='''Custom oauth2 plugin for CKAN 2.11''',
     long_description='''
     The OAuth2 extension allows site visitors to login through an OAuth2 server.
     ''',
