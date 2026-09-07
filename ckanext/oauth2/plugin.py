@@ -24,7 +24,7 @@ from .oauth2 import *
 import os
 
 from functools import partial
-from ckan import plugins
+from ckan import authz, plugins
 from ckan.common import g, current_user
 from ckan.plugins import toolkit
 import urllib.parse
@@ -47,7 +47,19 @@ def user_create(context, data_dict):
 
 @toolkit.auth_sysadmins_check
 def user_update(context, data_dict):
-    msg = toolkit._('Users cannot be edited.')
+    # Sysadmins (Platform Administrators) are exempt: promoting another
+    # administrator, and approving or deactivating an account, are both
+    # user_update, and without this there is no way to do either through the
+    # site -- only from the command line, which skips authorization entirely.
+    #
+    # The exemption has to be spelled out because @auth_sysadmins_check
+    # suppresses the automatic sysadmin bypass in ckan/authz.py. Keeping the
+    # decorator rather than dropping it leaves the decision visible here.
+    # Deleted users never reach this function; is_authorized rejects them first.
+    if authz.is_sysadmin(context.get('user')):
+        return {'success': True}
+
+    msg = toolkit._('User records can only be edited by an administrator.')
     return _no_permissions(context, msg)
 
 

@@ -1,0 +1,41 @@
+{% extends "page.html" %}
+
+{% block subtitle %}{% if pending %}{{ _('Account awaiting approval') }}{% else %}{{ _('Account not active') }}{% endif %}{% endblock %}
+
+{%- block content %}
+  <div class="main_container_csm">
+    <div>
+      <h1 class="page_heading_csm">
+        {% if pending %}
+          {{ _('Your account is awaiting approval') }}
+        {% else %}
+          {{ _('Your account is not active') }}
+        {% endif %}
+      </h1>
+    </div>
+    <div class="short_underline_csm"></div>
+    <div>
+      {% if pending %}
+        <p>
+          {{ _('Thank you for signing in. Your account has been created and is waiting for an administrator to review it.') }}
+        </p>
+        <p>
+          {{ _('You will be able to sign in once your account has been approved.') }}
+        </p>
+      {% else %}
+        <p>
+          {{ _('This account is no longer active, so it cannot be used to sign in.') }}
+        </p>
+      {% endif %}
+      {% if support_email %}
+        <p>
+          {{ _('If you believe this is a mistake, please contact') }}
+          <a href="mailto:{{ support_email }}">{{ support_email }}</a>.
+        </p>
+      {% endif %}
+      <p>
+        <a class="btn btn-primary" href="{{ h.url_for('home.index') }}">{{ _('Return to the home page') }}</a>
+      </p>
+    </div>
+  </div>
+{% endblock %}

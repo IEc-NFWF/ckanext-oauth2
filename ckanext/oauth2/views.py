@@ -2,6 +2,7 @@ import logging
 from flask import Blueprint, jsonify, make_response, redirect, abort
 import logging
 from ckanext.oauth2 import constants
+import ckan.model as model
 from ckan.common import session
 import ckan.lib.helpers as helpers
 import ckan.plugins.toolkit as toolkit
@@ -48,6 +49,19 @@ def login():
     came_from_url = _get_previous_page(constants.INITIAL_PAGE)
     return oauth2helper.challenge(came_from_url)
 
+def _account_not_active_response(user_obj):
+    u''' The page a user gets in place of a session when their account is not
+        active: newly created and awaiting approval, or deactivated/rejected.
+        No session and no token are stored, so the account has no access to the
+        site at all until an administrator approves it.
+    '''
+    extra_vars = {
+        'pending': getattr(user_obj, 'state', None) == model.State.PENDING,
+        'support_email': oauth2helper.support_email,
+    }
+    return make_response(
+        toolkit.render('oauth2/account_not_active.html', extra_vars), 403)
+
 @oauth2.route('/oauth2/callback')
 def callback():
 
@@ -55,6 +69,10 @@ def callback():
         token = oauth2helper.get_token()
         # log.debug(f'token:{token}')
         user_name,user_obj = oauth2helper.identify(token)
+        if not oauth2helper.can_log_in(user_obj):
+            log.info(f'User {user_name} authenticated but is not active '
+                     f'(state: {getattr(user_obj, "state", None)}); no session granted')
+            return _account_not_active_response(user_obj)
         oauth2helper.log_user_into_ckan(user_obj)
         oauth2helper.update_token(user_name, token)
         response = oauth2helper.redirect_from_callback()

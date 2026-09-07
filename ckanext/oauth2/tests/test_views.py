@@ -44,3 +44,49 @@ class TestOAuthViews:
         with patch('ckanext.oauth2.views.toolkit.request', request):
             response = login()
             # Add your assertions for the response
+
+
+class TestCallbackAccountGate:
+    u''' The callback must only hand out a session to an active account.
+        A pending account is one awaiting an administrator's approval; a
+        deleted one has been deactivated or rejected.
+    '''
+
+    def _helper_for(self, state):
+        user_obj = MagicMock()
+        user_obj.state = state
+
+        helper = MagicMock()
+        helper.identify.return_value = ('test_user', user_obj)
+        helper.can_log_in.side_effect = lambda user: user.state == 'active'
+        helper.support_email = 'support@example.org'
+        return helper
+
+    def test_active_user_is_logged_in(self):
+        helper = self._helper_for('active')
+
+        with app.test_request_context('/oauth2/callback'), \
+                patch('ckanext.oauth2.views.oauth2helper', helper):
+            response = callback()
+
+        helper.log_user_into_ckan.assert_called_once()
+        helper.update_token.assert_called_once()
+        assert response == helper.redirect_from_callback.return_value
+
+    @pytest.mark.parametrize('state,pending', [('pending', True), ('deleted', False)])
+    def test_inactive_user_gets_no_session(self, state, pending):
+        helper = self._helper_for(state)
+
+        with app.test_request_context('/oauth2/callback'), \
+                patch('ckanext.oauth2.views.oauth2helper', helper), \
+                patch('ckanext.oauth2.views.toolkit.render',
+                      return_value='rendered') as render:
+            response = callback()
+
+        assert response.status_code == 403
+        assert not helper.log_user_into_ckan.called
+        # No token is stored either -- nothing about this sign-in is kept.
+        assert not helper.update_token.called
+        render.assert_called_once_with(
+            'oauth2/account_not_active.html',
+            {'pending': pending, 'support_email': 'support@example.org'})

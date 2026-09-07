@@ -76,6 +76,32 @@ You can also use environment variables to configure this plugin, the name of the
 - `CKAN_OAUTH2_PROFILE_API_FULLNAME_FIELD`
 - `CKAN_OAUTH2_PROFILE_API_MAIL_FIELD`
 - `CKAN_OAUTH2_AUTHORIZATION_HEADER`
+- `CKAN_OAUTH2_SUPPORT_EMAIL`
+
+## NFWF: account approval
+
+This fork does not let the identity provider decide who gets into CKAN. An
+account that the provider authenticates still needs a Platform Administrator to
+approve it before it can be used:
+
+* A user signing in for the first time gets a CKAN account in the `pending`
+  state and **no session at all** — not even to browse public data. They see
+  `templates/oauth2/account_not_active.html` instead, with a 403. The same page
+  is shown to accounts that have been deactivated or rejected, which are stored
+  as `deleted`. Set `CKAN_OAUTH2_SUPPORT_EMAIL` to put a contact address on it;
+  leave it unset and the page simply omits that line.
+* Approving an account means setting its state to `active`
+  (`user_patch`/`user_update`). Existing accounts are unaffected — only newly
+  created ones start out pending.
+* `user_update` is therefore no longer blocked for sysadmins, only for everyone
+  else. Without that, promoting an administrator or approving an account would
+  be possible only from the command line, which skips authorization entirely.
+* `CKAN_OAUTH2_PROFILE_API_GROUPMEMBERSHIP_FIELD` /
+  `CKAN_OAUTH2_SYSADMIN_GROUP_NAME` map a provider claim onto the CKAN sysadmin
+  flag. CKAN, not the provider, is the source of truth for roles here, so that
+  mapping can only ever *grant* the flag — it will not remove it when the claim
+  is absent, which would otherwise demote every administrator promoted through
+  CKAN on their next login.
 
 **Additional notes**:
 * This extension only works when your CKAN instance is working over HTTPS, since OAuth 2.0 depends on it. You can follow the [Starting CKAN over HTTPs tutorial](https://github.com/conwetlab/ckanext-oauth2/wiki/Starting-CKAN-over-HTTPs) to learn how to do that. 

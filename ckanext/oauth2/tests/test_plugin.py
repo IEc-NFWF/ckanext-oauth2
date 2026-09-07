@@ -95,9 +95,23 @@ class TestAuthFunctions:
         context = {'user': 'test_user'}
         data_dict = {}
 
-        result = user_update(context, data_dict)
+        with patch('ckanext.oauth2.plugin.authz.is_sysadmin', return_value=False):
+            result = user_update(context, data_dict)
         assert not result['success']
-        assert result['msg'] == "Users cannot be edited."
+        assert result['msg'] == "User records can only be edited by an administrator."
+
+    def test_user_update_allowed_for_sysadmin(self):
+        # Platform Administrators have to be able to promote another
+        # administrator and approve/deactivate accounts, both of which are
+        # user_update. @auth_sysadmins_check suppresses CKAN's own sysadmin
+        # bypass, so this exemption is the only thing that lets them through.
+        context = {'user': 'admin_user'}
+        data_dict = {}
+
+        with patch('ckanext.oauth2.plugin.authz.is_sysadmin', return_value=True) as is_sysadmin:
+            result = user_update(context, data_dict)
+        assert result['success']
+        is_sysadmin.assert_called_once_with('admin_user')
 
     def test_user_reset(self):
         context = {'user': 'test_user'}

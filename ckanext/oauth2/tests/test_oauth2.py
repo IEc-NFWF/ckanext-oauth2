@@ -29,7 +29,7 @@ import ckanext.oauth2.oauth2 as oauth2
 from ckanext.oauth2.oauth2 import OAuth2Helper
 import httpretty
 from ckanext.oauth2 import db 
-from mock import patch, MagicMock
+from unittest.mock import patch, MagicMock
 from parameterized import parameterized
 from oauthlib.oauth2 import InsecureTransportError, MissingCodeError, MissingTokenError
 from requests.exceptions import SSLError
@@ -380,6 +380,79 @@ class OAuth2PluginTest(unittest.TestCase):
         # Assert that login_user was called with the correct arguments
         login_user_mock.assert_called_once_with(user_obj, remember=True)
         login_user_mock.reset_mock()  # Reset the mock for the next iteration
+
+    def test_user_json_creates_new_users_pending(self):
+        # New accounts must not be usable until an administrator approves them.
+        # This path skips the user_create action, whose state defaults to active.
+        helper = self._helper()
+        new_user = MagicMock()
+        oauth2.model.User = MagicMock(return_value=new_user)
+        oauth2.model.User.by_email = MagicMock(return_value=None)
+
+        user, user_obj = helper.user_json({
+            self._user_field: 'new_user',
+            self._email_field: 'new@test.com',
+        })
+
+        oauth2.model.User.assert_called_once_with(email='new@test.com')
+        new_user.set_pending.assert_called_once_with()
+        self.assertEqual(new_user, user)
+        self.assertEqual(new_user, user_obj)
+
+    def test_user_json_leaves_existing_state_alone(self):
+        # An account that has already been approved -- or deactivated -- keeps
+        # the state it has; only the identity fields are refreshed on login.
+        helper = self._helper()
+        existing = MagicMock()
+        oauth2.model.User = MagicMock()
+        oauth2.model.User.by_email = MagicMock(return_value=existing)
+
+        user, _user_obj = helper.user_json({
+            self._user_field: 'existing_user',
+            self._email_field: 'existing@test.com',
+        })
+
+        self.assertEqual(0, oauth2.model.User.called)
+        self.assertEqual(0, existing.set_pending.call_count)
+        self.assertEqual('existing_user', user.name)
+
+    @parameterized.expand([
+        # (group in the claim, sysadmin before login, sysadmin after login)
+        ('admin', False, True),
+        ('admin', True, True),
+        ('other', False, False),
+        ('other', True, True),      # an absent claim must never demote anyone
+    ])
+    def test_user_json_sysadmin_claim_only_grants(self, claimed_group, before, after):
+        helper = self._helper()
+        helper.profile_api_groupmembership_field = self._group_field
+        helper.sysadmin_group_name = 'admin'
+
+        existing = MagicMock()
+        existing.sysadmin = before
+        oauth2.model.User = MagicMock()
+        oauth2.model.User.by_email = MagicMock(return_value=existing)
+
+        user, _user_obj = helper.user_json({
+            self._user_field: 'test_user',
+            self._email_field: 'test@test.com',
+            self._group_field: claimed_group,
+        })
+
+        self.assertEqual(after, user.sysadmin)
+
+    @parameterized.expand([
+        ('active', True),
+        ('pending', False),
+        ('deleted', False),
+        (None, False),
+    ])
+    def test_can_log_in(self, state, expected):
+        helper = self._helper()
+        user_obj = MagicMock()
+        user_obj.state = state
+
+        self.assertEqual(expected, helper.can_log_in(user_obj))
 
 
     @parameterized.expand([(True, True), (True, False), (False, False), (False, True)])

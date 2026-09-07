@@ -75,6 +75,9 @@ class OAuth2Helper(object):
         self.profile_api_mail_field = six.text_type(os.environ.get('CKAN_OAUTH2_PROFILE_API_MAIL_FIELD', toolkit.config.get('ckan.oauth2.profile_api_mail_field', ''))).strip()
         self.profile_api_groupmembership_field = six.text_type(os.environ.get('CKAN_OAUTH2_PROFILE_API_GROUPMEMBERSHIP_FIELD', toolkit.config.get('ckan.oauth2.profile_api_groupmembership_field', ''))).strip()
         self.sysadmin_group_name = six.text_type(os.environ.get('CKAN_OAUTH2_SYSADMIN_GROUP_NAME', toolkit.config.get('ckan.oauth2.sysadmin_group_name', ''))).strip()
+        # Optional. Shown on the page a user gets instead of a session when
+        # their account is not active; omitted from the page when unset.
+        self.support_email = six.text_type(os.environ.get('CKAN_OAUTH2_SUPPORT_EMAIL', toolkit.config.get('ckan.oauth2.support_email', ''))).strip()
 
         self.redirect_uri = urljoin(urljoin(os.environ.get('CKAN_SITE_URL', toolkit.config.get('ckan.site_url', 'https://localhost:5000')), toolkit.config.get('ckan.root_path')), REDIRECT_URL)
 
@@ -185,6 +188,12 @@ class OAuth2Helper(object):
         # If the user does not exist, we have to create it...
         if user is None:
             user = model.User(email=email)
+            # New accounts wait for an administrator to approve them. CKAN's
+            # user table defaults state to 'active' and this path deliberately
+            # skips the user_create action, so pending has to be set by hand --
+            # otherwise anyone the identity provider accepts is active here the
+            # moment they first sign in.
+            user.set_pending()
             user_obj = user
 
         # Now we update his/her user_name with the one provided by the OAuth2 service
@@ -195,11 +204,28 @@ class OAuth2Helper(object):
         if self.profile_api_fullname_field != "" and self.profile_api_fullname_field in user_data:
             user.fullname = user_data[self.profile_api_fullname_field]
 
-        # Update sysadmin status
+        # Update sysadmin status.
+        #
+        # Grant only, never revoke. The membership claim is not the source of
+        # truth for who is a Platform Administrator -- CKAN is -- so an absent
+        # claim must not demote anyone. Assigning the comparison directly, as
+        # this used to, would silently strip the sysadmin flag on the next login
+        # of every administrator promoted through CKAN itself.
         if self.profile_api_groupmembership_field != "" and self.profile_api_groupmembership_field in user_data:
-            user.sysadmin = self.sysadmin_group_name in user_data[self.profile_api_groupmembership_field]
+            if self.sysadmin_group_name in user_data[self.profile_api_groupmembership_field]:
+                user.sysadmin = True
         return user,user_obj
- 
+
+    def can_log_in(self, user_obj):
+        '''Whether this account may be given a CKAN session.
+
+        Only an active account gets one. New accounts are created pending and
+        stay that way until an administrator approves them; deactivated and
+        rejected accounts are stored as deleted. No session means no access at
+        all, not even to public data, which is what was asked for.
+        '''
+        return getattr(user_obj, 'state', None) == model.State.ACTIVE
+
     def log_user_into_ckan(self, user_obj):
         # Log the user in and remember the session
         login_user(user_obj, remember=True)
